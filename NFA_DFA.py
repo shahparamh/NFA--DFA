@@ -1,0 +1,255 @@
+import streamlit as st
+import pandas as pd
+import graphviz
+
+# ---------- Utilities ----------
+def parse_list(raw: str):
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+# ---------- NFA → DFA functions ----------
+def epsilon_closure_of(state, enfa):
+    stack = [state]
+    closure = {state}
+    while stack:
+        s = stack.pop()
+        for nxt in enfa.get((s, "ε"), set()):
+            if nxt not in closure:
+                closure.add(nxt)
+                stack.append(nxt)
+    return closure
+
+def remove_epsilon(states, alphabet, enfa, start_state, final_states):
+    closures = {s: epsilon_closure_of(s, enfa) for s in states}
+    nfa_no_e = {}
+    nfa_finals = set()
+    for s in states:
+        if any(f in closures[s] for f in final_states):
+            nfa_finals.add(s)
+        for a in alphabet:
+            move = set()
+            for c in closures[s]:
+                move |= enfa.get((c, a), set())
+            if move:
+                dest = set()
+                for m in move:
+                    dest |= closures[m]
+                nfa_no_e[(s, a)] = dest
+    return closures, nfa_no_e, nfa_finals
+
+def nfa_to_dfa(states, alphabet, nfa_no_e, start_state, final_states):
+    dfa_start = frozenset([start_state])
+    dfa_states = [dfa_start]
+    unmarked = [dfa_start]
+    dfa_trans = {}
+    dfa_finals = set()
+    while unmarked:
+        S = unmarked.pop()
+        for a in alphabet:
+            nxt = set()
+            for s in S:
+                nxt |= nfa_no_e.get((s, a), set())
+            if nxt:
+                nxt_f = frozenset(nxt)
+                dfa_trans[(S, a)] = nxt_f
+                if nxt_f not in dfa_states:
+                    dfa_states.append(nxt_f)
+                    unmarked.append(nxt_f)
+    for S in dfa_states:
+        if any(s in final_states for s in S):
+            dfa_finals.add(S)
+    return dfa_states, dfa_trans, dfa_start, dfa_finals
+
+# ---------- Graphviz ----------
+def draw_state_node(dot, state, is_start=False, is_final=False, color="black"):
+    shape = "doublecircle" if is_final else "circle"
+    dot.node(state, state, shape=shape, color=color, fontcolor=color)
+
+def draw_nfa_graph(states, alphabet, nfa_no_e, start_state, final_states, color="black"):
+    dot = graphviz.Digraph()
+    dot.attr(rankdir="LR")
+    dot.node("", shape="none")
+    for s in states:
+        draw_state_node(dot, s, is_start=(s==start_state), is_final=(s in final_states), color=color)
+    dot.edge("", start_state, color=color)
+    for (src, a), dsts in nfa_no_e.items():
+        for d in sorted(dsts):
+            dot.edge(src, d, label=a, color=color)
+    return dot
+
+def draw_dfa_graph(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals, color="black"):
+    dot = graphviz.Digraph()
+    dot.attr(rankdir="LR")
+    dot.node("", shape="none")
+    def label_of(S): 
+        return "".join(sorted(S))
+    for S in dfa_states:
+        draw_state_node(dot, label_of(S), is_start=(S==dfa_start), is_final=(S in dfa_finals), color=color)
+    dot.edge("", label_of(dfa_start), color=color)
+    for (src, a), dst in dfa_trans.items():
+        dot.edge(label_of(src), label_of(dst), label=a, color=color)
+    return dot
+
+# ---------- LaTeX functions ----------
+def df_to_latex_matrix_phi(states, alphabet, transitions, start_state, final_states, caption="Table"):
+    latex = "\\begin{table}[h]\n"
+    latex += "    \\centering\n"
+    latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
+    latex += "    \\hline\n"
+    latex += "State & " + " & ".join(alphabet) + " \\\\ \\hline\n"
+
+    for s in states:
+        row_label = s
+        if s == start_state:
+            row_label = "→" + row_label
+        if s in final_states:
+            row_label += "*"
+        row_entries = []
+        for a in alphabet:
+            nxt = transitions.get((s,a), set())
+            if nxt:
+                row_entries.append(",".join(sorted(nxt)) if len(nxt)>1 else next(iter(nxt)))
+            else:
+                row_entries.append("φ")
+        latex += row_label + " & " + " & ".join(row_entries) + " \\\\ \\hline\n"
+
+    latex += "    \\end{tabular}\n"
+    latex += f"    \\caption{{{caption}}}\n"
+    latex += "\\end{table}"
+    return latex
+
+def dfa_to_latex(states, alphabet, transitions, start_state, final_states, caption="DFA Table"):
+    latex = "\\begin{table}[h]\n"
+    latex += "    \\centering\n"
+    latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
+    latex += "    \\hline\n"
+    latex += "State & " + " & ".join(alphabet) + " \\\\ \\hline\n"
+
+    for S in states:
+        S_lbl = "".join(sorted(S))
+        if S == start_state:
+            S_lbl = "→" + S_lbl
+        if S in final_states:
+            S_lbl += "*"
+        row_entries = []
+        for a in alphabet:
+            nxt = transitions.get((S,a), set())
+            if nxt:
+                dst = "".join(sorted(nxt))
+                row_entries.append(dst)
+            else:
+                row_entries.append("φ")
+        latex += S_lbl + " & " + " & ".join(row_entries) + " \\\\ \\hline\n"
+
+    latex += "    \\end{tabular}\n"
+    latex += f"    \\caption{{{caption}}}\n"
+    latex += "\\end{table}"
+    return latex
+
+# ---------- Streamlit ----------
+st.set_page_config(page_title="NFA → DFA Dashboard", layout="wide")
+st.title("ε-NFA / NFA → DFA Dashboard")
+
+# ---------- Sidebar ----------
+st.sidebar.header("📥 Excel Upload")
+uploaded_file = st.sidebar.file_uploader("Drag and drop NFA Excel file", type=["xlsx"])
+
+st.sidebar.header("Manual Input")
+manual_states = st.sidebar.text_input("States (comma separated)", "q0,q1")
+manual_alphabet = st.sidebar.text_input("Alphabet (comma separated)", "a,b")
+manual_start = st.sidebar.text_input("Start State", "q0")
+manual_final = st.sidebar.text_input("Final States (comma separated)", "q1")
+
+# ---------- Parse Inputs ----------
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    nfa_states = list(df['State'].unique())
+    alphabet = list(df['Input'].unique())
+    start_state = df['Start_State'].dropna().iloc[0] if 'Start_State' in df.columns else nfa_states[0]
+    final_states = list(df['Final_State'].dropna())
+    nfa_transitions = {}
+    for _, row in df.iterrows():
+        key = (row['State'], row['Input'])
+        if key not in nfa_transitions:
+            nfa_transitions[key] = set()
+        nfa_transitions[key].add(row['Next_State'])
+else:
+    nfa_states = parse_list(manual_states)
+    alphabet = parse_list(manual_alphabet)
+    start_state = manual_start.strip()
+    final_states = parse_list(manual_final)
+    st.sidebar.markdown("#### Transitions")
+    nfa_transitions = {}
+    for state in nfa_states:
+        for sym in alphabet:
+            next_states = st.sidebar.text_input(f"δ({state}, {sym}) (comma separated)", "").strip()
+            if next_states:
+                nfa_transitions[(state, sym)] = set(ns.strip() for ns in next_states.split(","))
+
+# ---------- Validation ----------
+error_msg = None
+if start_state not in nfa_states:
+    error_msg = f"❌ Start state `{start_state}` is not in states!"
+elif not set(final_states).issubset(set(nfa_states)):
+    error_msg = "❌ Some final states are not in the set of states!"
+elif any(dst not in nfa_states for dsts in nfa_transitions.values() for dst in dsts):
+    error_msg = "❌ Some transitions point to states not in the state set!"
+if error_msg:
+    st.error(error_msg)
+    st.stop()
+
+# ---------- NFA → DFA ----------
+closures, nfa_no_e, nfa_finals = remove_epsilon(nfa_states, alphabet, nfa_transitions, start_state, final_states)
+dfa_states, dfa_trans, dfa_start, dfa_finals = nfa_to_dfa(nfa_states, alphabet, nfa_no_e, start_state, nfa_finals)
+
+# ---------- Display ----------
+col1, col2 = st.columns(2)
+
+# ----- NFA -----
+with col1:
+    st.subheader("NFA State Diagram")
+    nfa_dot = draw_nfa_graph(nfa_states, alphabet, nfa_no_e, start_state, nfa_finals, color="black")
+    st.graphviz_chart(nfa_dot)
+    st.download_button("Download NFA Diagram (SVG)", data=nfa_dot.pipe(format="svg"), file_name="nfa.svg")
+
+    st.markdown("### NFA Transition Table")
+    nfa_table_data = []
+    for s in nfa_states:
+        row_label = s
+        if s == start_state:
+            row_label = "→" + row_label
+        if s in nfa_finals:
+            row_label += "*"
+        row_entries = {}
+        for a in alphabet:
+            nxt = nfa_no_e.get((s,a), set())
+            row_entries[a] = ",".join(sorted(nxt)) if nxt else "φ"
+        nfa_table_data.append({"State": row_label, **row_entries})
+    st.dataframe(pd.DataFrame(nfa_table_data))
+    
+    st.subheader("NFA Table LaTeX")
+    st.code(df_to_latex_matrix_phi(nfa_states, alphabet, nfa_no_e, start_state, nfa_finals, caption="Original NFA Transition Table"), language="latex")
+
+# ----- DFA -----
+with col2:
+    st.subheader("DFA State Diagram")
+    dfa_dot = draw_dfa_graph(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals, color="black")
+    st.graphviz_chart(dfa_dot)
+    st.download_button("Download DFA Diagram (SVG)", data=dfa_dot.pipe(format="svg"), file_name="dfa.svg")
+
+    st.markdown("### DFA Transition Table")
+    dfa_table_data = []
+    for S in dfa_states:
+        S_lbl = "".join(sorted(S))
+        if S == dfa_start:
+            S_lbl = "→" + S_lbl
+        if S in dfa_finals:
+            S_lbl += "*"
+        row_entries = {}
+        for a in alphabet:
+            nxt = dfa_trans.get((S,a), set())
+            row_entries[a] = "".join(sorted(nxt)) if nxt else "φ"
+        dfa_table_data.append({"State": S_lbl, **row_entries})
+    st.dataframe(pd.DataFrame(dfa_table_data))
+    
+    st.subheader("DFA Table LaTeX")
+    st.code(dfa_to_latex(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals, caption="Original DFA Transition Table"), language="latex")
