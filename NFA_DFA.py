@@ -26,6 +26,8 @@ def remove_epsilon(states, alphabet, enfa, start_state, final_states):
         if any(f in closures[s] for f in final_states):
             nfa_finals.add(s)
         for a in alphabet:
+            if a == "ε":  # skip epsilon in DFA
+                continue
             move = set()
             for c in closures[s]:
                 move |= enfa.get((c, a), set())
@@ -45,6 +47,8 @@ def nfa_to_dfa(states, alphabet, nfa_no_e, start_state, final_states):
     while unmarked:
         S = unmarked.pop()
         for a in alphabet:
+            if a == "ε":
+                continue
             nxt = set()
             for s in S:
                 nxt |= nfa_no_e.get((s, a), set())
@@ -74,6 +78,7 @@ def draw_nfa_graph(states, alphabet, nfa_no_e, start_state, final_states, color=
     for (src, a), dsts in nfa_no_e.items():
         for d in sorted(dsts):
             dot.edge(src, d, label=a, color=color)
+
     return dot
 
 def draw_dfa_graph(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals, color="black"):
@@ -122,7 +127,7 @@ def dfa_to_latex(states, alphabet, transitions, start_state, final_states, capti
     latex += "    \\centering\n"
     latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
     latex += "    \\hline\n"
-    latex += "State & " + " & ".join(alphabet) + " \\\\ \\hline\n"
+    latex += "State & " + " & ".join(a for a in alphabet if a != 'ε') + " \\\\ \\hline\n"
 
     for S in states:
         S_lbl = "".join(sorted(S))
@@ -132,6 +137,8 @@ def dfa_to_latex(states, alphabet, transitions, start_state, final_states, capti
             S_lbl += "*"
         row_entries = []
         for a in alphabet:
+            if a == "ε":
+                continue
             nxt = transitions.get((S,a), set())
             if nxt:
                 dst = "".join(sorted(nxt))
@@ -180,7 +187,7 @@ else:
     st.sidebar.markdown("#### Transitions")
     nfa_transitions = {}
     for state in nfa_states:
-        for sym in alphabet:
+        for sym in alphabet + ["ε"]:  # Include epsilon
             next_states = st.sidebar.text_input(f"δ({state}, {sym}) (comma separated)", "").strip()
             if next_states:
                 nfa_transitions[(state, sym)] = set(ns.strip() for ns in next_states.split(","))
@@ -207,7 +214,7 @@ col1, col2 = st.columns(2)
 # ----- NFA -----
 with col1:
     st.subheader("NFA State Diagram")
-    nfa_dot = draw_nfa_graph(nfa_states, alphabet, nfa_no_e, start_state, nfa_finals, color="black")
+    nfa_dot = draw_nfa_graph(nfa_states, alphabet, nfa_transitions, start_state, nfa_finals, color="black")
     st.graphviz_chart(nfa_dot)
     st.download_button("Download NFA Diagram (SVG)", data=nfa_dot.pipe(format="svg"), file_name="nfa.svg")
 
@@ -220,14 +227,14 @@ with col1:
         if s in nfa_finals:
             row_label += "*"
         row_entries = {}
-        for a in alphabet:
-            nxt = nfa_no_e.get((s,a), set())
+        for a in alphabet + ["ε"]:
+            nxt = nfa_transitions.get((s,a), set())
             row_entries[a] = ",".join(sorted(nxt)) if nxt else "φ"
         nfa_table_data.append({"State": row_label, **row_entries})
     st.dataframe(pd.DataFrame(nfa_table_data))
     
     st.subheader("NFA Table LaTeX")
-    st.code(df_to_latex_matrix_phi(nfa_states, alphabet, nfa_no_e, start_state, nfa_finals, caption="Original NFA Transition Table"), language="latex")
+    st.code(df_to_latex_matrix_phi(nfa_states, alphabet + ["ε"], nfa_transitions, start_state, nfa_finals, caption="Original NFA Transition Table"), language="latex")
 
 # ----- DFA -----
 with col2:
