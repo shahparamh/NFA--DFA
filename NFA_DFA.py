@@ -127,7 +127,8 @@ def dfa_to_latex(states, alphabet, transitions, start_state, final_states, capti
     latex += "    \\centering\n"
     latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
     latex += "    \\hline\n"
-    latex += "State & " + " & ".join(f"$\\epsilon$" if a=="ε" else a for a in alphabet) + " \\\\ \\hline\n"
+    header_symbols = [a for a in alphabet if a != "ε"]
+    latex += "State & " + " & ".join(header_symbols) + " \\\\ \\hline\n"
 
     for S in states:
         S_lbl = "".join(sorted(S))
@@ -137,8 +138,8 @@ def dfa_to_latex(states, alphabet, transitions, start_state, final_states, capti
             S_lbl += "*"
         row_entries = []
         for a in alphabet:
-            # if a == "ε":
-            #     continue
+            if a == "ε":
+                continue
             nxt = transitions.get((S,a), set())
             if nxt:
                 dst = "".join(sorted(nxt))
