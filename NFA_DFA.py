@@ -114,7 +114,7 @@ def df_to_latex_matrix_phi(states, alphabet, transitions, start_state, final_sta
             if nxt:
                 row_entries.append(",".join(sorted(nxt)) if len(nxt)>1 else next(iter(nxt)))
             else:
-                row_entries.append("φ")
+                row_entries.append("$\phi$")
         latex += row_label + " & " + " & ".join(row_entries) + " \\\\ \\hline\n"
 
     latex += "    \\end{tabular}\n"
