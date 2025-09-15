@@ -100,7 +100,7 @@ def df_to_latex_matrix_phi(states, alphabet, transitions, start_state, final_sta
     latex += "    \\centering\n"
     latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
     latex += "    \\hline\n"
-    latex += "State & " + " & ".join(alphabet) + " \\\\ \\hline\n"
+    latex += "State & " + " & ".join(f"$\\epsilon$" if a=="ε" else a for a in alphabet) + " \\\\ \\hline\n"
 
     for s in states:
         row_label = s
@@ -127,7 +127,7 @@ def dfa_to_latex(states, alphabet, transitions, start_state, final_states, capti
     latex += "    \\centering\n"
     latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
     latex += "    \\hline\n"
-    latex += "State & " + " & ".join(a for a in alphabet if a != 'ε') + " \\\\ \\hline\n"
+    latex += "State & " + " & ".join(f"$\\epsilon$" if a=="ε" else a for a in alphabet) + " \\\\ \\hline\n"
 
     for S in states:
         S_lbl = "".join(sorted(S))
@@ -137,14 +137,14 @@ def dfa_to_latex(states, alphabet, transitions, start_state, final_states, capti
             S_lbl += "*"
         row_entries = []
         for a in alphabet:
-            if a == "ε":
-                continue
+            # if a == "ε":
+            #     continue
             nxt = transitions.get((S,a), set())
             if nxt:
                 dst = "".join(sorted(nxt))
                 row_entries.append(dst)
             else:
-                row_entries.append("φ")
+                row_entries.append("$\phi$")
         latex += S_lbl + " & " + " & ".join(row_entries) + " \\\\ \\hline\n"
 
     latex += "    \\end{tabular}\n"
