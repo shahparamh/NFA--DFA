@@ -78,7 +78,6 @@ def draw_nfa_graph(states, alphabet, nfa_no_e, start_state, final_states, color=
     for (src, a), dsts in nfa_no_e.items():
         for d in sorted(dsts):
             dot.edge(src, d, label=a, color=color)
-
     return dot
 
 def draw_dfa_graph(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals, color="black"):
@@ -100,8 +99,8 @@ def df_to_latex_matrix_phi(states, alphabet, transitions, start_state, final_sta
     latex += "    \\centering\n"
     latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
     latex += "    \\hline\n"
-    latex += "State & " + " & ".join(f"$\\epsilon$" if a=="ε" else a for a in alphabet) + " \\\\ \\hline\n"
-
+    header_alphabet = ["$\\epsilon$" if a == "ε" else a for a in alphabet]
+    latex += "State & " + " & ".join(header_alphabet) + " \\\\ \\hline\n"
     for s in states:
         row_label = s
         if s == start_state:
@@ -114,9 +113,8 @@ def df_to_latex_matrix_phi(states, alphabet, transitions, start_state, final_sta
             if nxt:
                 row_entries.append(",".join(sorted(nxt)) if len(nxt)>1 else next(iter(nxt)))
             else:
-                row_entries.append("$\phi$")
+                row_entries.append("$\\phi$")
         latex += row_label + " & " + " & ".join(row_entries) + " \\\\ \\hline\n"
-
     latex += "    \\end{tabular}\n"
     latex += f"    \\caption{{{caption}}}\n"
     latex += "\\end{table}"
@@ -125,11 +123,10 @@ def df_to_latex_matrix_phi(states, alphabet, transitions, start_state, final_sta
 def dfa_to_latex(states, alphabet, transitions, start_state, final_states, caption="DFA Table"):
     latex = "\\begin{table}[h]\n"
     latex += "    \\centering\n"
-    latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)+1) + "}\n"
+    latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)) + "}\n"
     latex += "    \\hline\n"
-    header_symbols = [a for a in alphabet if a != "ε"]
-    latex += "State & " + " & ".join(header_symbols) + " \\\\ \\hline\n"
-
+    header_alphabet = ["$\\epsilon$" if a == "ε" else a for a in alphabet if a != 'ε']
+    latex += "State & " + " & ".join(header_alphabet) + " \\\\ \\hline\n"
     for S in states:
         S_lbl = "".join(sorted(S))
         if S == start_state:
@@ -141,13 +138,8 @@ def dfa_to_latex(states, alphabet, transitions, start_state, final_states, capti
             if a == "ε":
                 continue
             nxt = transitions.get((S,a), set())
-            if nxt:
-                dst = "".join(sorted(nxt))
-                row_entries.append(dst)
-            else:
-                row_entries.append("$\phi$")
+            row_entries.append("".join(sorted(nxt)) if nxt else "$\\phi$")
         latex += S_lbl + " & " + " & ".join(row_entries) + " \\\\ \\hline\n"
-
     latex += "    \\end{tabular}\n"
     latex += f"    \\caption{{{caption}}}\n"
     latex += "\\end{table}"
@@ -159,39 +151,47 @@ st.title("ε-NFA / NFA → DFA Dashboard")
 
 # ---------- Sidebar ----------
 st.sidebar.header("📥 Excel Upload")
-uploaded_file = st.sidebar.file_uploader("Drag and drop NFA Excel file", type=["xlsx"])
+uploaded_file = st.sidebar.file_uploader("Upload NFA Excel file", type=["xlsx"])
 
 st.sidebar.header("Manual Input")
-manual_states = st.sidebar.text_input("States (comma separated)", "q0,q1")
+manual_states = st.sidebar.text_input("States (comma separated)", "q0,q1,q2")
 manual_alphabet = st.sidebar.text_input("Alphabet (comma separated)", "a,b")
 manual_start = st.sidebar.text_input("Start State", "q0")
-manual_final = st.sidebar.text_input("Final States (comma separated)", "q1")
+manual_final = st.sidebar.text_input("Final States (comma separated)", "q2")
 
 # ---------- Parse Inputs ----------
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-    nfa_states = list(df['State'].unique())
-    alphabet = list(df['Input'].unique())
-    start_state = df['Start_State'].dropna().iloc[0] if 'Start_State' in df.columns else nfa_states[0]
-    final_states = list(df['Final_State'].dropna())
+    nfa_states = list(set(df['State'].str.replace("→", "").str.replace("*", "").str.strip()))
+    alphabet = list(set(df['Input'].str.strip()))
+    if 'Start_State' in df.columns and not df['Start_State'].dropna().empty:
+        start_state = df['Start_State'].dropna().iloc[0].replace("→", "").strip()
+    else:
+        start_state = nfa_states[0]
+    if 'Final_State' in df.columns:
+        final_states = df['Final_State'].dropna().apply(lambda x: x.replace("*", "").strip()).tolist()
+    else:
+        final_states = []
     nfa_transitions = {}
     for _, row in df.iterrows():
-        key = (row['State'], row['Input'])
+        key = (row['State'].replace("→", "").replace("*", "").strip(), row['Input'].strip())
         if key not in nfa_transitions:
             nfa_transitions[key] = set()
-        nfa_transitions[key].add(row['Next_State'])
+        next_state = row['Next_State'].strip()
+        if next_state and next_state != "φ":
+            nfa_transitions[key].add(next_state.replace("→", "").replace("*", "").strip())
 else:
     nfa_states = parse_list(manual_states)
     alphabet = parse_list(manual_alphabet)
     start_state = manual_start.strip()
     final_states = parse_list(manual_final)
-    st.sidebar.markdown("#### Transitions")
+    st.sidebar.markdown("### Transitions")
     nfa_transitions = {}
     for state in nfa_states:
-        for sym in alphabet + ["ε"]:  # Include epsilon
+        for sym in alphabet + ["ε"]:
             next_states = st.sidebar.text_input(f"δ({state}, {sym}) (comma separated)", "").strip()
             if next_states:
-                nfa_transitions[(state, sym)] = set(ns.strip() for ns in next_states.split(","))
+                nfa_transitions[(state, sym)] = set(ns.strip() for ns in next_states.split(",") if ns.strip() and ns.strip() != "φ")
 
 # ---------- Validation ----------
 error_msg = None
