@@ -26,7 +26,7 @@ def remove_epsilon(states, alphabet, enfa, start_state, final_states):
         if any(f in closures[s] for f in final_states):
             nfa_finals.add(s)
         for a in alphabet:
-            if a == "ε":  # skip epsilon in DFA
+            if a == "ε":
                 continue
             move = set()
             for c in closures[s]:
@@ -84,7 +84,7 @@ def draw_dfa_graph(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals, color
     dot = graphviz.Digraph()
     dot.attr(rankdir="LR")
     dot.node("", shape="none")
-    def label_of(S): 
+    def label_of(S):
         return "".join(sorted(S))
     for S in dfa_states:
         draw_state_node(dot, label_of(S), is_start=(S==dfa_start), is_final=(S in dfa_finals), color=color)
@@ -123,7 +123,7 @@ def df_to_latex_matrix_phi(states, alphabet, transitions, start_state, final_sta
 def dfa_to_latex(states, alphabet, transitions, start_state, final_states, caption="DFA Table"):
     latex = "\\begin{table}[h]\n"
     latex += "    \\centering\n"
-    latex += "    \\begin{tabular}{|" + "c|"*(len(alphabet)) + "}\n"
+    latex += "    \\begin{tabular}{|" + "c|"*(len([a for a in alphabet if a != 'ε']) + 1) + "}\n"
     latex += "    \\hline\n"
     header_alphabet = ["$\\epsilon$" if a == "ε" else a for a in alphabet if a != 'ε']
     latex += "State & " + " & ".join(header_alphabet) + " \\\\ \\hline\n"
@@ -233,7 +233,7 @@ with col1:
             row_entries[a] = ",".join(sorted(nxt)) if nxt else "φ"
         nfa_table_data.append({"State": row_label, **row_entries})
     st.dataframe(pd.DataFrame(nfa_table_data))
-    
+
     st.subheader("NFA Table LaTeX")
     st.code(df_to_latex_matrix_phi(nfa_states, alphabet + ["ε"], nfa_transitions, start_state, nfa_finals, caption="Original NFA Transition Table"), language="latex")
 
@@ -258,6 +258,6 @@ with col2:
             row_entries[a] = "".join(sorted(nxt)) if nxt else "φ"
         dfa_table_data.append({"State": S_lbl, **row_entries})
     st.dataframe(pd.DataFrame(dfa_table_data))
-    
+
     st.subheader("DFA Table LaTeX")
     st.code(dfa_to_latex(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals, caption="Original DFA Transition Table"), language="latex")
