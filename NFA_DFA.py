@@ -63,6 +63,28 @@ def nfa_to_dfa(states, alphabet, nfa_no_e, start_state, final_states):
             dfa_finals.add(S)
     return dfa_states, dfa_trans, dfa_start, dfa_finals
 
+# Complete DFA by adding dead state qd if needed
+def complete_dfa(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals):
+    state_set = set(dfa_states)
+    dead_state = frozenset({"qd"})
+    added_dead = False
+    
+    for state in list(state_set):
+        for a in alphabet:
+            if a == "ε":
+                continue
+            if (state, a) not in dfa_trans:
+                dfa_trans[(state, a)] = dead_state
+                added_dead = True
+    
+    if added_dead:
+        state_set.add(dead_state)
+        for a in alphabet:
+            if a == "ε":
+                continue
+            dfa_trans[(dead_state, a)] = dead_state
+    return list(state_set), dfa_trans
+
 # ---------- Graphviz ----------
 def draw_state_node(dot, state, is_start=False, is_final=False, color="black"):
     shape = "doublecircle" if is_final else "circle"
@@ -208,6 +230,7 @@ if error_msg:
 # ---------- NFA → DFA ----------
 closures, nfa_no_e, nfa_finals = remove_epsilon(nfa_states, alphabet, nfa_transitions, start_state, final_states)
 dfa_states, dfa_trans, dfa_start, dfa_finals = nfa_to_dfa(nfa_states, alphabet, nfa_no_e, start_state, nfa_finals)
+dfa_states, dfa_trans = complete_dfa(dfa_states, alphabet, dfa_trans, dfa_start, dfa_finals)
 
 # ---------- Display ----------
 col1, col2 = st.columns(2)
@@ -254,6 +277,8 @@ with col2:
             S_lbl += "*"
         row_entries = {}
         for a in alphabet:
+            if a == "ε":
+                continue
             nxt = dfa_trans.get((S,a), set())
             row_entries[a] = "".join(sorted(nxt)) if nxt else "φ"
         dfa_table_data.append({"State": S_lbl, **row_entries})
