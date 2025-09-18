@@ -47,7 +47,7 @@ Your Excel file should have columns: `State`, `Input`, `Next_State`, and optiona
 
 ## Example
 
-See [example_nfa.xlsx](example_nfa.xlsx) for a sample input file.
+See [sample_nfa.xlsx](sample_nfa.xlsx) for a sample input file.
 
 ## License
 
